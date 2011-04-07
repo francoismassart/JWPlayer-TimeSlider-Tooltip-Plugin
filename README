@@ -1,0 +1,67 @@
+JWPlayer TimeSlider Tooltip Plugin
+==================================
+
+The TimeSlider Tooltip Plugin adds a tooltip on top of the time slider of the Longtail Video JW Player... It follows the cursor position and displays the matching time position along the video track.
+
+Useful links
+------------
+
+* [Plugin's page on Longtail Video](http://www.longtailvideo.com/addons/plugins/259/TimeSlider-Tooltip-Plugin) 
+* [Documentation written by the author](http://blog.loadvars.com/time-slider-tooltip-plugin/)
+
+
+Getting started
+---------------
+
+In order to start playing around with the plugin source code, we need to install the SDK of the JW Player as well the Adobe Flex SDK (both free).
+
+* [Building Flash Plugins](http://www.longtailvideo.com/support/jw-player/jw-player-for-flash-v5/17679/building-flash-plugins)
+* [JW Player Plugin SDK](http://developer.longtailvideo.com/trac/browser/sdks/fl5-plugin-sdk)
+* [Compiling JW Player Plugins](http://www.longtailvideo.com/support/jw-player/jw-player-for-flash-v5/17681/compiling-jw-player-plugins)
+
+
+Installation
+-----------
+
+Download the [JW Player plugin SDK](http://developer.longtailvideo.com/trac/browser/sdks/fl5-plugin-sdk)...
+
+
+Testing
+-------
+
+Create a local host space on your computer where the SDK files will be accessible.
+Opening the test page on a browser by itself may block the JavaScript tool. You can use WAMP for Windows or MAMP for Mac OS...
+
+Try to load the testing page and play around with it.
+
+Edit the .bat file if you are on windows, the .sh if you are on Mac OS...
+
+Try to compile the plugin...
+
+
+Change log
+----------
+
+* 2011/03/31 v1.1.004
+Refactoring: removing unused vars...
++
+Update tooltip content after new time is detected (ex. new media playing, eg. playlist)
+
+* 2011/03/30 v1.1.003
+New settings available for skinning...
+labelheight		Adjust the height of the tooltip's label... default is 17.
+font				Choose the font family, default value is "Arial".
+fontsize			Adjust the font size, default value is 10.
+fontcolor		Change the font color, the default value is black (0x000000).
+fontweight		The font weight for the Tooltip's label. (normal, bold)
+fontstyle		The font style for the Tooltip's label. (normal, italic)
+
+* 2011/03/29 v1.1.002
+Fixing issue on the x position of the tooltip when using a playlist...
+Now using localToGlobal & globalToLocal...
+
+* 2011/03/29 v1.1.001
+Fixing issue on player version 5.1... 
+Using this version, the video did autostart no matter what the configuration was and...
+was only showing a black screen until the video reached the end and display the poster image.
+_player.play(); was removed

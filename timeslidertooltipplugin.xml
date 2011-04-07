@@ -1,0 +1,51 @@
+<plugin>
+	<title>Time Slider Tooltip Plugin</title>
+	<filename>timeslidertooltipplugin.swf</filename>
+	<version>1</version>
+	<compatibility>Compatible with 5.0.</compatibility>
+	<author>Belgacom Skynet, Francois Massart</author>
+	<description>
+		This plugin adds a tooltip showing the cursor position on the media timeline... It shows the time as MM:SS.
+	</description>
+	<href>http://www.skynet.be/</href>
+
+	<flashvars>
+		<flashvar>
+			<name>marginbottom</name>
+			<default>0</default>
+			<description>Adjust the vertical position of the tooltip... default is 0.</description>
+		</flashvar>
+		<flashvar>
+			<name>labelheight</name>
+			<default>17</default>
+			<description>Adjust the height of the tooltip's label... default is 17.</description>
+		</flashvar>
+		<flashvar>
+			<name>font</name>
+			<default>Arial</default>
+			<description>Choose the font family, default value is "Arial".</description>
+		</flashvar>
+		<flashvar>
+			<name>fontsize</name>
+			<default>10</default>
+			<description>Adjust the font size, default value is 10.</description>
+		</flashvar>
+		<flashvar>
+			<name>fontcolor</name>
+			<default>0x000000</default>
+			<description>Change the font color, the default value is black (0x000000).</description>
+		</flashvar>
+		<flashvar>
+			<name>fontweight</name>
+			<default>normal</default>
+			<description>The font weight for the Tooltip's label. (normal, bold)</description>
+		</flashvar>
+		<flashvar>
+			<name>fontstyle</name>
+			<default>normal</default>
+			<description>The font style for the Tooltip's label. (normal, italic)</description>
+		</flashvar>
+	</flashvars>
+
+
+</plugin>
