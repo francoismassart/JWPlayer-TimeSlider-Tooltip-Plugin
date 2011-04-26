@@ -1,9 +1,13 @@
 /**
  * Tooltip Plugin for JW Player v5
  * @author Francois Massart, Belgacom Skynet (francois.massart@belgacom.be)
- * @version 1.1.004
+ * @version 1.1.005
  * 
  * Change log:
+ * 
+ * 2011/04/26 v1.1.005
+ * Using H:MM:SS when media duration is longer than 59min59sec... (instead of MM:SS)
+ * and when the new setting "displayhours" has been set to true.
  * 
  * 2011/03/31 v1.1.004
  * Refactoring: removing unused vars...
@@ -78,6 +82,8 @@ package
 			_player = player;
 			_config = config;
 			
+			parseConfig();
+			
 			// Event listeners
 			_player.addEventListener(MediaEvent.JWPLAYER_MEDIA_TIME, onMediaTimeHandler);
 			
@@ -96,6 +102,26 @@ package
 		 */		
 		public function resize(w:Number, h:Number):void 
 		{
+		}
+		
+		private function parseConfig():void
+		{
+			var displayhours:Boolean = false;
+			try
+			{
+				if ("true" == String(_config["displayhours"]))
+				{
+					displayhours =  true;
+				}
+			}
+			catch (e:Error)
+			{
+				
+			}
+			finally 
+			{
+				_config["displayhours"] = displayhours;
+			}
 		}
 		
 		private function createTooltip():void
@@ -256,7 +282,15 @@ package
 		
 		private function toTimeString(n:int):String
 		{
-			return pad(Math.floor(n/60), 2)+":"+pad(Math.floor(n%60), 2);
+			var time_str:String = "";
+			if (n >= 3600 && true===Boolean(_config['displayhours']))
+			{	// Longer than one hour
+				var hours:uint = Math.floor(n / 3600);
+				time_str += Math.floor(n / 3600) + ":";
+				n -= 3600 * hours;
+			}
+			time_str += pad(Math.floor(n / 60), 2) + ":" + pad(Math.floor(n % 60), 2);
+			return time_str;
 		}
 		
 		private function pad(n:Number, padLength:uint):String

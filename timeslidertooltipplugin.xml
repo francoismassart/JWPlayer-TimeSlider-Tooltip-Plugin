@@ -11,6 +11,11 @@
 
 	<flashvars>
 		<flashvar>
+			<name>displayhours</name>
+			<default>false</default>
+			<description>If your video is longer than 60 minutes, the timestamp will be shown as H:MM:SS in the Tooltip label. By default we keep it in MM:SS so don't forget to set this setting to true if you do want the hours...</description>
+		</flashvar>
+		<flashvar>
 			<name>marginbottom</name>
 			<default>0</default>
 			<description>Adjust the vertical position of the tooltip... default is 0.</description>
