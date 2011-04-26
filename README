@@ -42,6 +42,9 @@ Try to compile the plugin...
 Change log
 ----------
 
+* 2011/04/26 v1.1.005
+Using H:MM:SS when media duration is longer than 59min59sec... (instead of MM:SS) and when the new setting "displayhours" has been set to true.
+
 * 2011/03/31 v1.1.004
 Refactoring: removing unused vars...
 +
