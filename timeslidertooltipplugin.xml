@@ -50,6 +50,11 @@
 			<default>normal</default>
 			<description>The font style for the Tooltip's label. (normal, italic)</description>
 		</flashvar>
+		<flashvar>
+			<name>image</name>
+			<default></default>
+			<description>The URL of an image that could be used instead of the default background image and instead of image from a skinning</description>
+		</flashvar>
 	</flashvars>
 
 

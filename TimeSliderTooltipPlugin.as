@@ -1,9 +1,12 @@
 /**
  * Tooltip Plugin for JW Player v5
  * @author Francois Massart, Belgacom Skynet (francois.massart@belgacom.be)
- * @version 1.1.005
+ * @version 2.0
  * 
  * Change log:
+ * 
+ * 2011/09/01 v2.0
+ * Supporting new setting for JavaScript plugin "image".
  * 
  * 2011/04/26 v1.1.005
  * Using H:MM:SS when media duration is longer than 59min59sec... (instead of MM:SS)
@@ -40,6 +43,7 @@ package
 	import com.longtailvideo.jwplayer.plugins.*;
 	import com.longtailvideo.jwplayer.view.components.*;
 	import flash.geom.Point;
+	import flash.net.URLRequest;
 	
 	import flash.display.*;
 	import flash.events.*;
@@ -58,6 +62,8 @@ package
 		private var _timeSlider:DisplayObject;
 		private var _tooltip:Sprite;
 		private var _txt:TextField;
+		
+		private var _bg:DisplayObject;
 		
 		
 		/** Let the player know what the name of your plugin is. **/
@@ -87,8 +93,41 @@ package
 			// Event listeners
 			_player.addEventListener(MediaEvent.JWPLAYER_MEDIA_TIME, onMediaTimeHandler);
 			
-			createTooltip();
-			setupTooltip();
+			_config['image'] = ( undefined == _config['image']) ? "" : _config['image'];
+			if ( "" != _config['image'] )
+			{
+				var ldr:Loader = new Loader();
+				ldr.contentLoaderInfo.addEventListener(Event.COMPLETE, onImagePreloadingDone);
+				ldr.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, onImagePreloadingDone);
+				ldr.load(new URLRequest(_config['image']));
+			}
+			else
+			{
+				onImagePreloadingDone(null);
+			}
+		}
+		
+		/**
+		 * When the image has been loaded use it or fallback to default if IO_ERROR
+		 */
+		public function onImagePreloadingDone(event:Event):void 
+		{
+			try
+			{
+				if ( Event.COMPLETE === event.type )
+				{
+					_bg = LoaderInfo(event.target).content;
+				}
+			}
+			catch (error:Error)
+			{
+				
+			}
+			finally
+			{
+				createTooltip();
+				setupTooltip();
+			}
 		}
 		
 		/**
@@ -134,15 +173,23 @@ package
 				_tooltip.mouseEnabled = _tooltip.mouseChildren = false;
 				// Background
 				// ==========
-				// Element available in the current skin ?
-				var bg:DisplayObject = _player.skin.getSkinElement(this.id, "timerSliderTooltipBackground");
-				if (null == bg)
-				{	// Fall back to default asset
-					bg = new TimeSliderToolTipBackground();
+				if (null == _bg)
+				{	// Fall back to default assets (Skin, then default)
+					
+					// Element available in the current skin ?
+					var bgSkin:DisplayObject = bgSkin = _player.skin.getSkinElement(this.id, "timerSliderTooltipBackground");
+					if (null == bgSkin)
+					{
+						_bg = new TimeSliderToolTipBackground();
+					}
+					else
+					{
+						_bg = bgSkin;
+					}
 				}
-				bg.x = -bg.width / 2;
-				bg.y = -bg.height;
-				_tooltip.addChild(bg);
+				_bg.x = -_bg.width / 2;
+				_bg.y = -_bg.height;
+				_tooltip.addChild(_bg);
 				// Margin bottom
 				// =============
 				var tooltipY:Number = Number(_config['marginbottom']);
@@ -199,10 +246,10 @@ package
 				var tf:TextFormat = new TextFormat(fontName, fontSize, fontColor, ("bold"===fontWeight), ("italic"===fontStyle));
 				tf.align = TextFormatAlign.CENTER;
 				_txt.defaultTextFormat = tf;
-				_txt.width = bg.width;
+				_txt.width = _bg.width;
 				_txt.height = labelHeight;
-				_txt.x = bg.x;
-				_txt.y = bg.y;
+				_txt.x = _bg.x;
+				_txt.y = _bg.y;
 				_txt.multiline = false;
 				_tooltip.addChild(_txt);
 			}
