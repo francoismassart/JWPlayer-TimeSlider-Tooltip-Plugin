@@ -43,7 +43,7 @@ Change log
 ----------
 
 * 2011/04/26 v2.0s
-Supporting new setting for JavaScript plugin "image".Using H:MM:SS when media duration is longer than 59min59sec... (instead of MM:SS) and when the new setting "displayhours" has been set to true.
+Supporting new setting for JavaScript plugin "image".
 
 * 2011/04/26 v1.1.005
 Using H:MM:SS when media duration is longer than 59min59sec... (instead of MM:SS) and when the new setting "displayhours" has been set to true.
