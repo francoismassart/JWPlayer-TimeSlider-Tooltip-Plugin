@@ -66,7 +66,7 @@
             // Initialize tooltip
             // ==================
             var map = {};
-            div.innerHTML = "...";
+            div.innerHTML = "<div>...</div>";
             
             _show(false);
             
@@ -110,7 +110,7 @@
                 var width = _rail.width();
                 var percent = x_pos/width;
                 var tooltip_x = event.pageX - _j.parent().offset().left;
-                div.innerHTML = _toTimeString(Math.round(percent*dur));
+                div.innerHTML = '<div>'+_toTimeString(Math.round(percent*dur))+'</div>';
                 tooltip_x -= Math.ceil(_j.width()/2);
                 div.style.left = tooltip_x + "px";
                 _show(x_pos >= 0 && x_pos <= width);
