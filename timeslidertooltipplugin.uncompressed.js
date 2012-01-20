@@ -157,5 +157,5 @@
         };
 
     };
-    jwplayer().registerPlugin('timeslidertooltipplugin', template, "timeslidertooltipplugin-1");
+    jwplayer().registerPlugin('timeslidertooltipplugin.uncompressed', template, "timeslidertooltipplugin-1");
 })(jwplayer);
