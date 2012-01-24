@@ -49,7 +49,7 @@
             config.font = (!config.font) ? "Arial,sans-serif" : config.font;
             var fontSize = parseInt(config.fontsize);
             config.fontsize = isNaN(fontSize) ? 11 : fontSize;
-            var fontColor = config.fontcolor;
+            var fontColor = String(config.fontcolor);
             if(0 === fontColor.indexOf("0x")) {
             	fontColor = "#"+fontColor.substr(2);
             }
