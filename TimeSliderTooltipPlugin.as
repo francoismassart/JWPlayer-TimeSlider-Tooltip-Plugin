@@ -1,9 +1,21 @@
 /**
  * Tooltip Plugin for JW Player v5
  * @author Francois Massart, Belgacom Skynet (francois.massart@belgacom.be)
- * @version 2.0
+ * @version 3.0
  * 
  * Change log:
+ * 
+ * 2012/05/02 v3.0
+ * Bug fix for parameters + Bug fix for iOS poster not showing
+ * 
+ * 2012/04/20 v3.0
+ * Bug fix for the new preview feature when using playlists
+ * 
+ * 2012/03/19 v3.0
+ * Bug fix for the new preview feature
+ * 
+ * 2012/03/19 v2.1
+ * Testing the new preview feature
  * 
  * 2011/09/01 v2.0
  * Supporting new setting for JavaScript plugin "image".
@@ -39,20 +51,26 @@
 package
 {
 	import com.longtailvideo.jwplayer.events.*;
+	import com.longtailvideo.jwplayer.model.*;
 	import com.longtailvideo.jwplayer.player.*;
 	import com.longtailvideo.jwplayer.plugins.*;
 	import com.longtailvideo.jwplayer.view.components.*;
-	import flash.geom.Point;
-	import flash.net.URLRequest;
 	
+	import flash.net.URLRequest;
 	import flash.display.*;
 	import flash.events.*;
+	import flash.geom.*;
+	import flash.system.*;
 	import flash.text.*;
+	import flash.external.*;
 	
 	public class TimeSliderTooltipPlugin extends Sprite implements IPlugin 
 	{
 		[Embed(source="tooltip.png")]
 		private const TimeSliderToolTipBackground:Class;
+		
+		[Embed(source="preview-tooltip.png")]
+		private const TimeSliderToolTipPreviewBackground:Class;
 		
 		private var _player:IPlayer;
 		private var _config:PluginConfig;
@@ -61,15 +79,30 @@ package
 		private var _capLeftWidth:Number = 0;
 		private var _timeSlider:DisplayObject;
 		private var _tooltip:Sprite;
+		private var _preview:Sprite;
+		private var _previewMask:Sprite;
 		private var _txt:TextField;
 		
 		private var _bg:DisplayObject;
+		private var _previewBg:DisplayObject;
+		private var _previewVisible:Boolean;
+		private var _lastMouseMovePosition:Object;
+		private var _loadingScreen:Sprite;
 		
+		private var _pool:Object = {};
+		private var _preloadQueue:Array;
+		private var _preloader:Loader;
+		private var _context:LoaderContext;
 		
 		/** Let the player know what the name of your plugin is. **/
 		public function get id():String 
 		{
 			return "timeslidertooltipplugin"; 
+		}
+		
+		private function info(msg:Object):void
+		{
+			//ExternalInterface.call('console.info', msg);
 		}
 		
 		/** Constructor **/
@@ -88,22 +121,45 @@ package
 			_player = player;
 			_config = config;
 			
+			_context = new LoaderContext();
+			_context.checkPolicyFile = false; // bypass security sandbox / policy file
+			
 			parseConfig();
 			
 			// Event listeners
 			_player.addEventListener(MediaEvent.JWPLAYER_MEDIA_TIME, onMediaTimeHandler);
+			_player.addEventListener(PlaylistEvent.JWPLAYER_PLAYLIST_ITEM, onPlaylistItemHandler);
 			
+			saveLastMouseMove();
+			_preloadQueue = new Array();
 			_config['image'] = ( undefined == _config['image']) ? "" : _config['image'];
 			if ( "" != _config['image'] )
 			{
-				var ldr:Loader = new Loader();
-				ldr.contentLoaderInfo.addEventListener(Event.COMPLETE, onImagePreloadingDone);
-				ldr.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, onImagePreloadingDone);
-				ldr.load(new URLRequest(_config['image']));
+				_preloadQueue.push({target:'_bg', url:_config['image']});
 			}
-			else
+			if ( "" != _config.preview['image'] )
 			{
-				onImagePreloadingDone(null);
+				_preloadQueue.push({target:'_previewBg', url:_config.preview['image']});
+			}
+			launchNextPreloadQueue();
+		}
+				
+		private function launchNextPreloadQueue():void
+		{
+			if(0 == _preloadQueue.length)
+			{
+				createTooltip();
+				setupTooltip();
+			} 
+			else 
+			{
+				if(null == _preloader)
+				{
+					_preloader = new Loader();
+					_preloader.contentLoaderInfo.addEventListener(Event.COMPLETE, onImagePreloadingDone);
+					_preloader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, onImagePreloadingDone);
+				}
+				_preloader.load(new URLRequest(_preloadQueue[0].url), _context);
 			}
 		}
 		
@@ -114,9 +170,12 @@ package
 		{
 			try
 			{
+				var obj:Object = _preloadQueue.shift();
+				var var_str:String = obj['target'];
 				if ( Event.COMPLETE === event.type )
 				{
-					_bg = LoaderInfo(event.target).content;
+					
+					this[var_str] = LoaderInfo(event.target).content;
 				}
 			}
 			catch (error:Error)
@@ -125,8 +184,7 @@ package
 			}
 			finally
 			{
-				createTooltip();
-				setupTooltip();
+				launchNextPreloadQueue();
 			}
 		}
 		
@@ -145,6 +203,75 @@ package
 		
 		private function parseConfig():void
 		{
+			// New feature "Preview"
+			var user_cfg:Object = _config["preview"];
+			
+			// Default values
+			var preview_cfg:Object = {};
+				preview_cfg.preloadtext = "Loading...";
+				preview_cfg.extension = "jpg";
+				preview_cfg.preload = false;
+				preview_cfg.cache = true;
+			var frequency:Number;
+			var linelength:Number;
+			var spritelength:Number;
+				
+			if( 'undefined' == user_cfg || null == user_cfg ) 
+			{
+				// OLD WAY NOTATION
+				preview_cfg.enabled = ("true"==String(_config['preview.enabled'])) ? true : false;
+				preview_cfg.path = String(_config['preview.path']);
+				preview_cfg.path = ("undefined"==preview_cfg.path) ? null : preview_cfg.path;
+				preview_cfg.prefix = String(_config['preview.prefix']);
+				preview_cfg.prefix = ("undefined"==preview_cfg.prefix) ? null : preview_cfg.prefix;
+				preview_cfg.image = String(_config['preview.image']);
+				preview_cfg.image = ("undefined"==preview_cfg.image) ? "" : preview_cfg.image;
+				frequency = Number(_config['preview.frequency']);
+				if (isNaN(frequency)) { frequency = 1; }
+				preview_cfg.frequency = Math.round(frequency);
+				linelength = Number(_config['preview.linelength']);
+				if (isNaN(linelength)) { linelength = 5; }
+				preview_cfg.linelength = Math.round(linelength);
+				spritelength = Number(_config['preview.spritelength']);
+				if (isNaN(spritelength)) { spritelength = 25; }
+				preview_cfg.spritelength = Math.round(spritelength);
+			} else {
+				// NEW NOTATION
+				preview_cfg.enabled = ("true" == String(user_cfg.enabled)) ? true : false;
+				
+				// Path
+				if(undefined==user_cfg.path) {
+					preview_cfg.path = null;
+				} else {
+					preview_cfg.path = user_cfg.path;
+				}
+				
+				// Prefix
+				if(undefined==user_cfg.prefix) {
+					preview_cfg.prefix = null;
+				} else {
+					preview_cfg.prefix = user_cfg.prefix;
+				}
+				
+				// Image
+				preview_cfg['image'] = ( undefined == user_cfg['image']) ? "" : user_cfg['image'];
+				
+				// Frequency
+				frequency = Number(user_cfg['frequency']);
+				preview_cfg['frequency'] = ( isNaN(frequency) ) ? 1 : frequency;
+				
+				// Linelength
+				linelength = Number(user_cfg['linelength']);
+				preview_cfg['linelength'] = ( isNaN(linelength) ) ? 5 : linelength;
+				
+				// Spritelength
+				spritelength = Number(user_cfg['spritelength']);
+				preview_cfg['spritelength'] = ( isNaN(spritelength) ) ? 25 : spritelength;
+			}
+			info(preview_cfg);
+			_config["preview"] = preview_cfg;
+			
+			// DisplayHours
 			var displayhours:Boolean = false;
 			try
 			{
@@ -163,6 +290,48 @@ package
 			}
 		}
 		
+		private function getCurrentFile():String
+		{
+			// Get the playlist
+			var list:IPlaylist = _player.playlist;
+			// The currently playing item's file URL
+			return list.currentItem.file;
+		}
+		private function getPath():String
+		{
+			var path_str:String;
+			if ( null==_config.preview.path )
+			{
+				var currentFile:String = getCurrentFile();
+				path_str = currentFile.substr(0, currentFile.lastIndexOf('/')+1)
+			}
+			else
+			{
+				path_str = _config.preview.path;
+			}
+			return path_str;
+		}
+		
+		private function getPrefix():String
+		{
+			var prefix_str:String;
+			if ( null==_config.preview.prefix )
+			{
+				var currentFile:String = getCurrentFile();
+				var filename:String = currentFile.substr(currentFile.lastIndexOf('/')+1, currentFile.length);
+				var lastDot:int = filename.lastIndexOf('.');
+				if(0 < lastDot) {
+					filename = filename.substr(0, lastDot);
+				}
+				prefix_str = filename;
+			}
+			else
+			{
+				prefix_str = _config.preview.prefix;
+			}
+			return prefix_str;
+		}
+		
 		private function createTooltip():void
 		{
 			if ( null == _tooltip )
@@ -171,13 +340,12 @@ package
 				// ==================
 				_tooltip = new Sprite();
 				_tooltip.mouseEnabled = _tooltip.mouseChildren = false;
-				// Background
-				// ==========
+				// Backgrounds
+				// ===========
 				if (null == _bg)
 				{	// Fall back to default assets (Skin, then default)
-					
 					// Element available in the current skin ?
-					var bgSkin:DisplayObject = bgSkin = _player.skin.getSkinElement(this.id, "timerSliderTooltipBackground");
+					var bgSkin:DisplayObject = _player.skin.getSkinElement(this.id, "timerSliderTooltipBackground");
 					if (null == bgSkin)
 					{
 						_bg = new TimeSliderToolTipBackground();
@@ -189,7 +357,21 @@ package
 				}
 				_bg.x = -_bg.width / 2;
 				_bg.y = -_bg.height;
-				_tooltip.addChild(_bg);
+				if (null == _previewBg)
+				{	// Fall back to default assets (Skin, then default)
+					// Element available in the current skin ?
+					var previewBgSkin:DisplayObject = _player.skin.getSkinElement(this.id, "timerSliderTooltipPreviewBackground");
+					if (null == previewBgSkin)
+					{
+						_previewBg = new TimeSliderToolTipPreviewBackground();
+					}
+					else
+					{
+						_previewBg = previewBgSkin;
+					}
+				}
+				_previewBg.x = -_previewBg.width / 2;
+				_previewBg.y = -_previewBg.height;
 				// Margin bottom
 				// =============
 				var tooltipY:Number = Number(_config['marginbottom']);
@@ -200,7 +382,7 @@ package
 				// Label height
 				// =============
 				var labelHeight:Number = Number(_config['labelheight']);
-				if (!isNaN(labelHeight))
+				if (isNaN(labelHeight))
 				{
 					labelHeight = 17;
 				}
@@ -246,15 +428,72 @@ package
 				var tf:TextFormat = new TextFormat(fontName, fontSize, fontColor, ("bold"===fontWeight), ("italic"===fontStyle));
 				tf.align = TextFormatAlign.CENTER;
 				_txt.defaultTextFormat = tf;
-				_txt.width = _bg.width;
 				_txt.height = labelHeight;
-				_txt.x = _bg.x;
-				_txt.y = _bg.y;
 				_txt.multiline = false;
-				_tooltip.addChild(_txt);
+				
+				// Preview
+				// =======
+				_preview = new Sprite();
+				_previewMask = new Sprite();
+				_preview.x = _previewMask.x = _previewBg.x + 2;
+				_preview.y = _previewMask.y = _previewBg.y + 2;
+				_previewMask.graphics.beginFill(0xFF0000);
+				_previewMask.graphics.drawRect(0, 0, 108, 60);
+				_tooltip.addChild(_previewMask);
+				_tooltip.addChild(_preview);
+				_preview.mask = _previewMask;
+				
+				_loadingScreen = new Sprite();
+				_loadingScreen.graphics.lineStyle(0,0x000000);
+				_loadingScreen.graphics.beginFill(0x000000);
+				_loadingScreen.graphics.drawRect(0,0,108,60);
+				_loadingScreen.graphics.endFill();
+				var loading_txt:TextField = new TextField();
+				var loading_tf:TextFormat = new TextFormat(fontName, fontSize, 0xFFFFFF, true);
+				loading_tf.align = TextFormatAlign.CENTER;
+				loading_txt.defaultTextFormat = loading_tf;
+				loading_txt.width = 108;
+				loading_txt.height = labelHeight;
+				loading_txt.backgroundColor = 0x000000;				
+				loading_txt.background = true;				
+				info(labelHeight);
+				loading_txt.y = (60 - labelHeight) / 2;
+				loading_txt.multiline = false;
+				loading_txt.text = _config.preview.preloadtext;
+				_loadingScreen.addChild(loading_txt);
 			}
+			
+			_previewVisible = !_config.preview.enabled;
+			updateTooltipUI(_config.preview.enabled);
 		}
 		
+		private function updateTooltipUI(withPreview:Boolean):void {
+			if(withPreview!=_previewVisible) {
+				_previewVisible = withPreview;
+				
+				// Reset children
+				_tooltip.addChild(_bg);
+				_tooltip.removeChild(_bg);
+				_tooltip.addChild(_previewBg);
+				_tooltip.removeChild(_previewBg);
+				
+				var targetBg:DisplayObject = withPreview ? _previewBg : _bg;
+				_tooltip.addChild(targetBg);
+				_txt.x = targetBg.x;
+				_txt.y = (withPreview) ? targetBg.y+62 : targetBg.y;
+				_txt.width = targetBg.width;
+				_tooltip.addChild(_txt);
+				
+				// Preview
+				// =======
+				_tooltip.addChild(_preview);
+				//_preview.mask = _previewMask;
+				if(!withPreview) {
+					_tooltip.removeChild(_preview);
+				}
+			}
+		}
+				
 		private function setupTooltip():void
 		{
 			var dsp:DisplayObject;
@@ -272,7 +511,7 @@ package
 				}
 			}
 			else
-			{	// Probbaly an old skin
+			{	// Probably an old skin
 				if (_player.controls.controlbar is ControlbarComponentV4)
 				{	// ControlbarComponentV4
 					var controlbar:DisplayObjectContainer = DisplayObjectContainer(_player.controls.controlbar).getChildByName("controlbar") as DisplayObjectContainer;
@@ -306,6 +545,12 @@ package
 			_txt.text = toTimeString(Math.round(percent * _duration));
 		}
 		
+		private function onPlaylistItemHandler(event:PlaylistEvent):void 
+		{
+			info("onPlaylistItemHandler()");
+			_pool = {};
+		}
+		
 		private function onMouseHandler(event:MouseEvent):void 
 		{
 			_tooltip.visible = (MouseEvent.MOUSE_OVER === event.type && 0 < _duration);
@@ -317,8 +562,17 @@ package
 			{
 				var pos:Number = event.localX - _capLeftWidth;
 				var percent:Number = pos / _timeSlider.width;
+				var seconds:int = Math.round(percent * _duration);
 				
-				_txt.text = toTimeString(Math.round(percent * _duration));
+				_txt.text = toTimeString(seconds);
+				
+				// Preview
+				if(_config.preview.enabled) {
+					var pt:Point = getSpriteCoordinates(seconds);
+					var url:String = getPreviewSpriteUrl(seconds);
+					
+					setPreviewContent(pt, url);
+				}
 				
 				var global_pt:Point = _timeSlider.localToGlobal(new Point(event.localX, event.localY));
 				var local_pt:Point = _tooltip.parent.globalToLocal(global_pt);
@@ -327,6 +581,138 @@ package
 			}
 		}
 		
+		private function saveLastMouseMove(pt:Point = null, url:String = ""):void
+		{
+			if(null==_lastMouseMovePosition) 
+			{
+				_lastMouseMovePosition = {};
+			}
+			_lastMouseMovePosition.pt = pt;
+			_lastMouseMovePosition.url = url;			
+		}
+		
+		private function setPreviewContent(pt:Point = null, url:String = ""):void
+		{
+			pt = (null==pt) ? _lastMouseMovePosition.pt : pt;
+			url = (""==url) ? _lastMouseMovePosition.url : url;
+			if(null!=pt && ""!=url)
+			{
+				var img:* = getImageFromPool(url);
+				var found:Boolean = (img is DisplayObject);
+				if(found)
+				{
+					// Image loaded and ready!
+					img.x = -pt.x*108;
+					img.y = -pt.y*60;
+					_preview.addChild(img);
+					saveLastMouseMove();
+				}
+				else if( 0 === img )
+				{
+					// Image loading
+					_preview.addChild(_loadingScreen);
+					saveLastMouseMove(pt, url);
+				}
+				//updateTooltipUI(found);
+				updateTooltipUI(-1!=img);
+			}
+			else
+			{
+				updateTooltipUI(false);
+			}
+		}
+		
+		private function loadSprite(url:String):void
+		{
+			var ldr:Loader = new Loader();
+			var urlReq:URLRequest = new URLRequest(url);
+			//ldr.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, onSpriteLoadingDone);
+			ldr.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, function(req:URLRequest):Function {
+				return function(event:Event):void {
+					onSpriteLoadingDone(event, req.url);
+				}
+			}(urlReq));
+			ldr.contentLoaderInfo.addEventListener(Event.COMPLETE, function(req:URLRequest):Function {
+				return function(event:Event):void {
+					onSpriteLoadingDone(event, req.url);
+				}
+			}(urlReq));
+			ldr.load(urlReq, _context);
+		}
+		
+		private function onSpriteLoadingDone(event:Event, relativeUrl:String = null):void 
+		{
+			var ldrinfo:LoaderInfo;
+			var src:String;
+			var prop:String;
+			try
+			{
+				ldrinfo = LoaderInfo(event.target);
+				src = ( null == relativeUrl ) ? ldrinfo.url : relativeUrl;
+				prop = getPropertyFromPath(src);
+				_pool[prop] = -1;
+			
+				if ( Event.COMPLETE === event.type )
+				{
+					_pool[prop] = ldrinfo.loader; //Using ldrinfo.content fails with a security error
+				}
+			}
+			catch (error:Error)
+			{
+				info("error");
+				info(error);
+			}
+			finally
+			{
+				info("Finally "+prop+" ("+_pool[prop]+")");
+				setPreviewContent();
+			}
+		}
+		
+		private function getPropertyFromPath(path:String):String
+		{
+			var endPos:int = path.length - 4; // removing .jpg
+			var startPos:int = endPos - 4; // saving the 4 digits
+			return "image"+path.substring(startPos, endPos);
+		}
+		
+		private function getSpriteCoordinates(seconds:int):Point
+		{
+			var sec:uint = Math.floor(seconds / _config.preview.frequency);
+			var ratio:Number = (_config.preview.spritelength / _config.preview.linelength);
+			var pt:Point = new Point();
+			pt.x = sec % _config.preview.linelength;
+			pt.y = Math.floor( sec / _config.preview.linelength ) % ratio;
+            return pt;
+        }
+		
+		private function getPreviewSpriteUrl(seconds:int):String
+		{
+			seconds = (0 > seconds) ? 0 : seconds;
+			var n:Number = seconds / _config.preview.frequency / _config.preview.spritelength;
+			var url:String = getPath();
+			url += getPrefix();
+			url += pad(Math.floor(n), 4);
+			url += "."+_config.preview.extension;
+            return url;
+        }
+		
+		private function getImageFromPool(src:String):* {
+			//-1				The image loading failed to load
+			// 0				The image loading is pending
+			// DisplayObject	The image loading was successful
+			
+			var prop:String = getPropertyFromPath(src);
+			if ( 'undefined' == typeof(_pool[prop]) )
+			{
+				_pool[prop] = 0;
+				loadSprite(src);
+				return 0;
+			} else {
+				return _pool[prop];
+			}
+		}
+				
 		private function toTimeString(n:int):String
 		{
 			var time_str:String = "";

@@ -1,92 +1,270 @@
-(function(jwplayer) {
-
-    var template = function(player, config, div) {
-        var _j = $(div);
-        var _ready = false;
-        var _rail = null;
-        var _controlbar = null;
+(function (jwplayer) {
+    var template = function (player, config, div) {
+        var _div = div,
+			_dotNotation = _detectOldNotation(),
+            // Cached elements references to HTML nodes
+            _controlbar = null,
+            _rail = null,
+            _preview = null,
+            _time = null,
+            // Safety flags...
+            _ready = false,
+            _previewVisible,
+            // Cache
+            _pool = {},
+            _preloadQueue,
+            _preloader = null,
+			_jw = jwplayer.utils;
         
         function setup(evt) {
-            // Parsing the config object
-            _parseConfig();
-            
-            // Create the Tooltip
-            _createTooltip();
-            
             // Setting variables
-            _rail = $("#" + player.id + "_jwplayer_controlbar_timeSliderRail");
-            _controlbar = $("#" + player.id + "_jwplayer_controlbar_elements");
+            _controlbar = _jw.selectors("#" + player.id + "_jwplayer_controlbar_elements", document);
+            _rail = _jw.selectors("#" + player.id + "_jwplayer_controlbar_timeSliderRail", document);
             
-            // If everything went fine...
-            if(1===_rail.length && 1===_controlbar.length) {
-                _ready = true;
-                _controlbar.append(_j);
-                _controlbar.bind('mousemove', _mousemove);
-                _controlbar.bind('mouseout', _mouseout);
-            }
+			// Parsing the config object
+            _parseConfig();
         };
         
         player.onReady(setup);
         
-        this.resize = function(width, height) {
-            var map = {};
-            map.left = Math.round(width/2) + 'px';
-            var mb = isNaN(config.marginbottom) ? 0 : config.marginbottom;
-            var pos = _controlbar.offset().top;
-            
-            _controlbar.append(_j);
-            
-            map.bottom = (_j.height() - mb) + 'px';
-            _j.css(map);
+        this.resize = function (width, height) {
+			if(null != _div && null != _rail && null != _controlbar) {
+				_jw.append(_controlbar, _div);
+				// Update Styles
+				var map = {};
+				var marginBottom = isNaN(config.marginbottom) ? 0 : config.marginbottom;
+				var controlBarHeight = _jw.getElementHeight(_controlbar);
+				map.bottom = 0 + controlBarHeight + marginBottom + "px";
+				map.left = Math.round(width/2) + 'px';
+				_jw.css(_div, map);
+			}
         };
+		
+		function _detectOldNotation() {
+			for(k in config) {
+				if("pluginmode"!=k) {
+					return false;
+				}
+			}
+			return true;
+		};
         
+		function _getConfigValue(prop) {
+			if (_dotNotation) {
+				return player.config['timeslidertooltipplugin.'+prop];
+			} else {
+				var arr = prop.split(".");
+				var tot = arr.length;
+				var val = config;
+
+				for(var i = 0;  i < tot; i++) {
+					val = val[arr[i]];
+					if(i+1>=tot) {
+						return val;
+					}
+				}
+			}
+		};
+        	
         function _parseConfig() {
-            config.displayhours = ("true" == String(config.displayhours)) ? true : false;
-            var marginBottom = parseInt(config.marginbottom);
-            config.marginbottom = isNaN(marginBottom) ? 0 : marginBottom;
-            var labelHeight = parseInt(config.labelheight);
-            config.labelheight = (isNaN(labelHeight)) ? 17 : labelHeight;
-            config.font = (!config.font) ? "Arial,sans-serif" : config.font;
-            var fontSize = parseInt(config.fontsize);
-            config.fontsize = isNaN(fontSize) ? 11 : fontSize;
-            var fontColor = String(config.fontcolor);
-            if(0 === fontColor.indexOf("0x")) {
-            	fontColor = "#"+fontColor.substr(2);
-            }
-            config.fontcolor = (!fontColor) ? "#000" : fontColor;
-            var fontWeight = config.fontweight;
-            config.fontweight = (fontWeight!="normal" && fontWeight!="bold") ? "normal" : fontWeight;
-            var fontStyle = config.fontstyle;
-            config.fontstyle = (fontStyle!="normal" && fontStyle!="italic") ? "normal" : fontStyle;
-            config.defaultImage = "data:image/png;base64,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";
-            config.image = (null!=config.image) ? config.image : config.defaultImage;
+            _preloadQueue = new Array();
+			
+			// displayhours (H:MM:SS or MM:SS)
+			config.displayhours = ("true" == String(_getConfigValue('displayhours'))) ? true : false;
+			
+			// marginbottom (adjusts the vertical position of the tooltip % to the controlbar)
+			var marginBottom = parseInt(_getConfigValue('marginbottom'));
+			config.marginbottom = isNaN(marginBottom) ? 0 : marginBottom;
+			
+			// labelheight
+			var labelHeight = parseInt(_getConfigValue('labelheight'));
+			config.labelheight = (isNaN(labelHeight)) ? 17 : labelHeight;
+			
+			// font, fontsize, fontcolor, fontweight, fontstyle
+			var fontFamily = _getConfigValue('font');
+			config.font = (!fontFamily) ? "Arial,sans-serif" : fontFamily;
+			var fontSize = parseInt(_getConfigValue('fontsize'));
+			config.fontsize = isNaN(fontSize) ? 11 : fontSize;
+			var fontColor = String(_getConfigValue('fontcolor'));
+			if (0 === fontColor.indexOf("0x")) {
+				fontColor = "#"+fontColor.substr(2);
+			}
+			config.fontcolor = (!fontColor) ? "#000" : fontColor;
+			
+			var fontWeight = _getConfigValue('fontweight');
+			config.fontweight = (fontWeight!="normal" && fontWeight!="bold") ? "normal" : fontWeight;
+			
+			var fontStyle = _getConfigValue('fontstyle');
+			config.fontstyle = (fontStyle!="normal" && fontStyle!="italic") ? "normal" : fontStyle;
+			
+			// image
+			//config.image = (null!=config.image) ? config.image : _getDefaultImage();
+			var imageSrc = _getConfigValue('image');
+			config.image = (null!=imageSrc && 'undefined'!=imageSrc) ? imageSrc : "";
+			if (""!=config.image) {
+				_preloadQueue.push({target:'config.image', url:config.image});
+			}
+			
+			// New feature "Preview"
+			// =====================
+			// Enabled
+			var enabled = ("true" == String(_getConfigValue('preview.enabled'))) ? true : false;
+			// Path
+			var file = player.getPlaylistItem().file;
+			var path = String(_getConfigValue('preview.path'));
+			// Prefix
+			var prefix = String(_getConfigValue('preview.prefix'));
+			// Image
+			var previewImageSrc = String(_getConfigValue('preview.image'));
+			previewImageSrc = (null!=previewImageSrc && 'undefined'!=previewImageSrc) ? previewImageSrc : "";
+			var frequency = parseInt(_getConfigValue('preview.frequency'));
+			var linelength = parseInt(_getConfigValue('preview.linelength'));
+			var spritelength = parseInt(_getConfigValue('preview.spritelength'));
+			// Setting values
+			config.preview = {};
+			config.preview.preloadtext = "Loading...";
+			config.preview.extension = "jpg";
+			config.preview.preload = false;
+			config.preview.cache = true;
+			// User settings
+			config.preview.enabled = enabled;
+			config.preview.path = path;
+			config.preview.prefix = prefix;
+			config.preview.image = previewImageSrc;
+			if ('undefined'==config.preview.path) {
+				config.preview.path = null;
+			}
+			if ('undefined'==config.preview.prefix) {
+				config.preview.prefix = null;
+			}
+			if (""!=config.preview.image) {
+				_preloadQueue.push({target:'config.preview.image', url:config.preview.image});
+			}
+			if (isNaN(frequency)) {
+				config.preview.frequency = 1;
+			}else{
+				config.preview.frequency = frequency;
+			}
+			if (isNaN(linelength)) {
+				config.preview.linelength = 5;
+			}else{
+				config.preview.linelength = linelength;
+			}
+			if (isNaN(spritelength)) {
+				config.preview.spritelength = 25;
+			}else{
+				config.preview.spritelength = spritelength;
+			}
+			
+            _launchNextPreloadQueue();
         };
         
+        function _launchNextPreloadQueue() {
+            if (0 == _preloadQueue.length) {
+                // Create the Tooltip
+                _createTooltip();
+                
+                // If everything went fine...
+                if ( null != _rail && null != _controlbar ) {
+                    _ready = true;
+                    _jw.append(_controlbar, _div);
+                    _controlbar.addEventListener('mousemove', _mousemove);
+                    _controlbar.addEventListener('mouseout', _mouseout);
+                }
+            } else {
+                if (null == _preloader) {
+                    _preloader = new Image();
+                    _preloader.onload = _onImagePreloadingDone;
+                    _preloader.onerror = _onImagePreloadingDone;
+                }
+                _preloader.src = _preloadQueue[0].url;
+            }
+        };
+        
+        function _onImagePreloadingDone(event) {
+            var obj = _preloadQueue.shift();
+            var var_str = obj['target'];
+            switch ( event.type ) {
+                case "load":
+                    break;
+                case "error":
+                    // Overwrite the user settings because image was not loaded
+                    // We fall back to default backgrounds in this case...
+                    if ("config.image"==var_str) {
+                        config.image = "";
+                    } else if ("config.preview.image"==var_str){
+                        config.preview.image = "";
+                    }
+                    break;
+            }
+            _launchNextPreloadQueue();
+        };
+        
+		function _getCurrentFile() {
+			// The currently playing item's file URL
+			return player.getPlaylistItem().file;;
+		};
+		
+		function _getPath() {
+			var path_str;
+			if ( null==config.preview.path ) {
+				var currentFile = _getCurrentFile();
+				path_str = currentFile.substr(0, currentFile.lastIndexOf('/')+1)
+			} else {
+				path_str = config.preview.path;
+			}
+			return path_str;
+		};
+		
+		function _getPrefix() {
+			var prefix_str;
+			if ( null==config.preview.prefix ) {
+				var currentFile = _getCurrentFile();
+				var filename = currentFile.substr(currentFile.lastIndexOf('/')+1, currentFile.length);
+				var lastDot = filename.lastIndexOf('.');
+				if(0 < lastDot) {
+					filename = filename.substr(0, lastDot);
+				}
+				prefix_str = filename;
+			} else {
+				prefix_str = config.preview.prefix;
+			}
+			return prefix_str;
+		};
+		        
         function _createTooltip() {
-            // Initialize tooltip
-            // ==================
-            var map = {};
-            div.innerHTML = "<div>...</div>";
+            // Build Markup
+            // ============
+            _jw.html(_div, '<div class="tstt-preview"></div><span class="tstt-time">...</span>');
+            _preview = _jw.selectors.getElementsByTagAndClass('div', 'tstt-preview', _div)[0];
+            _time = _jw.selectors.getElementsByTagAndClass('span', 'tstt-time', _div)[0];
             
             _show(false);
             
-            // Background
-            // ==========
-            map.width = "41px";
-            map.height = "22px";
-            map.background = "url('" + config.defaultImage + "') left top no-repeat transparent";
-            var img = new Image();
-            img.onload = function() 
-            {
-                div.style.background = "url('" + config.image + "') left top no-repeat transparent";
-                div.style.width = this.width + "px";
-                div.style.height = this.height + "px";
-            };
-            img.src = config.image;
+            var map;
             
-            // Applying
-            // ========
+            // Applying CSS
+            // ============
+            
+            // General
+            map = {};
             map.position = 'absolute';
+            map.pointerEvents = "none";
+            _jw.css(_div, map);
+            
+            // Preview
+            map = {};
+            map.width = '108px'; //160px
+            map.height = '60px'; //90px
+            map.position = 'absolute';
+            map.top = '2px';
+            map.left = '2px';
+            map.overflow = 'hidden';
+            _jw.css(_preview, map);
+            
+            // Time
+            map = {};
+            map.display = "block";
             map.color = config.fontcolor;
             map.fontFamily = config.font;
             map.fontSize = config.fontsize + "px";
@@ -96,7 +274,58 @@
             map.textAlign = "center";
             map.lineHeight = config.labelheight + "px";
             map.pointerEvents = "none";
-            _j.css(map);
+            _jw.css(_time, map);
+            
+            _updateTooltipUI(config.preview.enabled);
+            _previewVisible = config.preview.enabled;
+        };
+        
+        function _updateTooltipUI(withPreview) {
+            var map = {};
+            if (withPreview!=_previewVisible) {
+                _previewVisible = !_previewVisible;
+                
+                var bg_src = withPreview ? config.preview.image : config.image;
+                if (""===bg_src) {
+                    // Default Background
+                    // ==================
+                    if (withPreview) {
+                        map.width = "112px";
+                        map.height = "82px";
+                        map.background = "url('" + _getDefaultPreviewImage() + "') left top no-repeat transparent";
+                    } else {
+                        map.width = "41px";
+                        map.height = "22px";
+                        map.background = "url('" + _getDefaultImage() + "') left top no-repeat transparent";
+                    }
+                    _jw.css(_div, map);
+                } else {
+                    // Custom background
+                    // =================
+                    var img = new Image();
+                    img.onload = function () {
+                        // Resize the tooltip to match the Tooltip background size
+                        map.background = "url('" + this.src + "') left top no-repeat transparent";
+                        map.width = this.width + "px";
+                        map.height = this.height + "px";
+                        _jw.css(_div, map);
+                    };
+                    img.onerror = function () {
+                        // Implement fallback to default?
+                    };
+                    img.src = withPreview ? config.preview.image : config.image;
+                }
+                
+                // Preview
+                // =======
+                if (withPreview) {
+                    _preview.style.display = "block";
+                    _time.style.marginTop = "62px";
+                } else {
+                    _preview.style.display = "none";
+                    _time.style.marginTop = "0px";
+                }
+            }
         };
         
         function _show(state) {
@@ -105,22 +334,76 @@
         
         function _mousemove(event) {
             var dur = player.getDuration();
-            if(_ready && dur > 0) {
-                var x_pos = event.pageX - _rail.offset().left;
-                var width = _rail.width();
+            if (_ready && dur > 0) {
+                var railOffset = _jw.getBoundingClientRect(_rail);
+                var x_pos = event.pageX - railOffset.left;
+                var width = _jw.getElementWidth(_rail);
                 var percent = x_pos/width;
-                var tooltip_x = event.pageX - _j.parent().offset().left;
-                div.innerHTML = '<div>'+_toTimeString(Math.round(percent*dur))+'</div>';
-                tooltip_x -= Math.ceil(_j.width()/2);
-                div.style.left = tooltip_x + "px";
+                var parentDiv = _jw.parentNode(_div);
+                var parentOffset = _jw.getBoundingClientRect(parentDiv);
+                var tooltip_x = event.pageX - parentOffset.left;
+                var seconds = Math.round(percent*dur);
+                // Preview
+                if (config.preview.enabled) {
+                    var pt = _getSpriteCoordinates(seconds);
+                    var url = _getPreviewSpriteUrl(seconds);
+                    var map = {};
+                    map.backgroundImage = "url('"+url+"')";
+                    map.backgroundPosition = "-"+(pt.x*108)+"px -"+(pt.y*60)+"px";
+                    _jw.css(_preview, map);
+                    //_updateTooltipUI(1===_getImageFromPool(url));
+                    _updateTooltipUI(-1!=_getImageFromPool(url));
+                }
+                // Time
+                _jw.html(_time, _toTimeString(seconds));
+                
+                var tooltipWidth = _jw.getElementWidth(_div);
+                tooltip_x -= Math.ceil(tooltipWidth/2);
+                _div.style.left = tooltip_x + "px";
                 _show(x_pos >= 0 && x_pos <= width);
             } else {
                 _show(false)
             }
         };
+                
+        function _getImageFromPool(src) {
+        	// Doesn't save the images, just remember if loading failed/succeeded
+            //-1    The image loading failed to load
+            // 0    The image loading is pending
+            // 1    The image loading was successful
+            if ('undefined'==typeof(_pool[src])) {
+                _pool[src] = 0;
+                var pool_img = new Image();
+                pool_img.onerror = function () { _pool[src] = -1; };
+                pool_img.onload = function () { _pool[src] = 1; };
+                pool_img.src = src;
+                return 0;
+            } else {
+                return _pool[src];
+            }
+        };
+        
+        function _getPreviewSpriteUrl(seconds) {
+            seconds = (0 > seconds) ? 0 : seconds;
+			var n = seconds / config.preview.frequency / config.preview.spritelength;
+            var url = _getPath();
+            url += _getPrefix();
+            url += _pad(Math.floor(n), 4);
+            url += "."+config.preview.extension;
+            return url;
+        };
+        
+        function _getSpriteCoordinates(seconds) {
+			var sec = Math.floor(seconds / config.preview.frequency);
+			var ratio = (config.preview.spritelength/config.preview.linelength);
+            var point = {};
+            point.x = sec % config.preview.linelength;
+            point.y = Math.floor(sec/config.preview.linelength) % ratio;
+            return point;
+        };
         
         function _mouseout(event) {
-            _show(false)
+            _show(false);
         };
         
         function _toTimeString(n) {
@@ -142,7 +425,14 @@
             }
             return str;
         };
-
+        
+        function _getDefaultImage() {
+            return "data:;base64,iVBORw0KGgoAAAANSUhEUgAAACkAAAAWCAYAAABdTLWOAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyRpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYxIDY0LjE0MDk0OSwgMjAxMC8xMi8wNy0xMDo1NzowMSAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNS4xIE1hY2ludG9zaCIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDoyOTJFQjY1QjY4NUQxMUUxODU2NjlGRUZDNTQ3OERBRCIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDoyOTJFQjY1QzY4NUQxMUUxODU2NjlGRUZDNTQ3OERBRCI+IDx4bXBNTTpEZXJpdmVkRnJvbSBzdFJlZjppbnN0YW5jZUlEPSJ4bXAuaWlkOjI5MkVCNjU5Njg1RDExRTE4NTY2OUZFRkM1NDc4REFEIiBzdFJlZjpkb2N1bWVudElEPSJ4bXAuZGlkOjI5MkVCNjVBNjg1RDExRTE4NTY2OUZFRkM1NDc4REFEIi8+IDwvcmRmOkRlc2NyaXB0aW9uPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hwYWNrZXQgZW5kPSJyIj8+uNEd5wAAAKlJREFUeNpi/P//PwMQBAKxBxArMgwecBuINwPxDkagI0EOzGQYvKCHCUj4Mwxu4A9yJP8gdyQ/E8MQAKOOHHXkqCNHHTnqyGHiyI+D3I0fQY7cN8gduY8FSCwBYhDtAsQig8hxr0BtSSBeywht9JINHjx4sEtBQYGQGgagGreBzDhuIEfgcyBIzWDI3VgdSg0HUrsIQnEotRwIAhSnSSxgF8zR1DIQIMAAyzExMof0JwMAAAAASUVORK5CYII=";
+        };
+        
+        function _getDefaultPreviewImage() {
+            return "data:;base64,iVBORw0KGgoAAAANSUhEUgAAAHAAAABSCAYAAACMhFB2AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyRpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYxIDY0LjE0MDk0OSwgMjAxMC8xMi8wNy0xMDo1NzowMSAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNS4xIE1hY2ludG9zaCIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDo0Q0UxRjVDQjY3QTQxMUUxOEJFMkY4QjEyOEYwMDM5OCIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDo0Q0UxRjVDQzY3QTQxMUUxOEJFMkY4QjEyOEYwMDM5OCI+IDx4bXBNTTpEZXJpdmVkRnJvbSBzdFJlZjppbnN0YW5jZUlEPSJ4bXAuaWlkOjRDRTFGNUM5NjdBNDExRTE4QkUyRjhCMTI4RjAwMzk4IiBzdFJlZjpkb2N1bWVudElEPSJ4bXAuZGlkOjRDRTFGNUNBNjdBNDExRTE4QkUyRjhCMTI4RjAwMzk4Ii8+IDwvcmRmOkRlc2NyaXB0aW9uPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hwYWNrZXQgZW5kPSJyIj8+Kta/WAAAARhJREFUeNrs1y2OwlAUgNGW4DEsoOyFEBxhGbOXWQYWhWkQbARTjWMFj/vEiEn4sdyX8yW3Nc/0HtG2L6V00T5mG7PqlKFrzClm7AOw4v3YScp+Z3HZ2UPadhVwYQ9pW8zsIHcAAQqgAAIUQAEUQIACKIACCFAABVAAAQqgAAogQAEUQAEEKIACCFAABVAAAQqgAAogQAEUQAEEKIACKIAABVAABRCgAAqgAAIUQAEEKIACKIAABVAABRCgAAqgAAIUQAHUS8C7NaTtXgEv9pC2yzwuh5h6X8cs7SRFt5gx5tiXUpp5qmmazsMwfDrTxZmNj5jvbFOB3uHVM75CEyK2iNfyb8Q/xFbxak29A590/gNt9QEfAgwAsOgxqt8Lp7QAAAAASUVORK5CYII=";
+        };
     };
-    jwplayer().registerPlugin('timeslidertooltipplugin.uncompressed', template, "timeslidertooltipplugin-2");
+    jwplayer().registerPlugin('timeslidertooltipplugin.uncompressed', template, "timeslidertooltipplugin-3");
 })(jwplayer);
